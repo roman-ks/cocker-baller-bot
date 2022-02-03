@@ -2,6 +2,7 @@ import json
 import os
 import random
 import time
+import re
 
 import boto3
 
@@ -199,7 +200,16 @@ def lambda_handler(event, context):
         print("no message in body")
         return
 
-    command = body.get("message")['text']
+    if "text" not in body["message"]:
+        print("no text")
+        return
+
+    command = body["message"]['text']
+    commands = re.findall("^/[a-zA-Z]*", command)
+    if not commands:
+        print("no command")
+        return
+    command = commands[0]
     print(f"Command {command}")
     handle_command(command, body)
 
