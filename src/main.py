@@ -12,12 +12,12 @@ print('Loading function')
 token = os.environ['tg_token']
 baseUrl = f'https://api.telegram.org/bot{token}'
 
-# dynamodb_table = os.environ['dynamodb_table']
-client = None #boto3.client('dynamodb')
+dynamodb_table = os.environ['dynamodb_table']
+client = boto3.client('dynamodb')
 
 min_length = 1
 min_circum = 1
-cum_regen_cooldown = 20
+cum_regen_cooldown = 20 * 60
 
 
 def send_message(message, chat_id):
@@ -42,7 +42,7 @@ def set_commands():
 
 
 def get_penus_info(chat_id, user_id):
-    item = client.get_item(
+    resp = client.get_item(
         TableName=dynamodb_table,
         Key={
             "chatId": {
@@ -54,14 +54,17 @@ def get_penus_info(chat_id, user_id):
         }
     )
 
-    print(f"Dynamodb item: {item}")
+    print(f"Dynamodb item: {resp}")
+    item = {"chatId": chat_id, "userId": user_id}
+    if "Item" in resp:
+        if 'length' in resp['Item']:
+            item['length'] = resp['Item']['length']['N']
+        if 'circum' in resp['Item']:
+            item['circum'] = resp['Item']['circum']['N']
+        if 'last_cum' in resp['Item']:
+            item['last_cum'] = resp['Item']['last_cum']['S']
     return item
 
-def get_str_or_null(val):
-    if val:
-        return str(val)
-
-    return None
 
 def update_penus_info(info):
     print(f"new penus info: {info}")
@@ -79,17 +82,17 @@ def update_penus_info(info):
         AttributeUpdates={
             "length": {
                 'Value': {
-                    'N': get_str_or_null(info.get('length'))
+                    'N': str(info.get('length', str(min_length)))
                 }
             },
             "circum": {
                 'Value': {
-                    'N': get_str_or_null(info.get('circum'))
+                    'N': str(info.get('circum', str(min_circum)))
                 }
             },
             "last_cum": {
                 'Value': {
-                    'S': get_str_or_null(info.get('last_cum'))
+                    'S': str(info.get('last_cum', '0'))
                 }
             }
         }
@@ -126,13 +129,10 @@ def grow(max_growth, min_size, curr_val):
 
 
 def check_penus(chat_id, user_id, user_name):
-    info = get_penus_info(chat_id, user_id)
+    item = get_penus_info(chat_id, user_id)
 
-    item = {"chatId": chat_id, "userId": user_id}
-    if "Item" in info:
-        print(f"found: {info}")
-        item['length'] = info['Item']['length']['N']
-        item['circum'] = info['Item']['circum']['N']
+    if "length" in item:
+        print(f"found: {item}")
 
         length_old = int(item.get('length', min_length))
         circum_old = int(item.get('circum', min_circum))
@@ -159,12 +159,11 @@ def check_penus(chat_id, user_id, user_name):
 def cum(chat_id, user_id, user_name):
     info = get_penus_info(chat_id, user_id)
 
-    if "Item" in info:
-        last_cum = info["Item"].get('last_cum', 0)
-        print(f'last cum {last_cum}')
-        if int(last_cum) + cum_regen_cooldown > int(time.time()):
-            send_message(f"АХАХХАХАХАХАХХА @{user_name} не зміг як😖", chat_id)
-            return
+    last_cum = info.get('last_cum', 0)
+    print(f'last cum {last_cum}')
+    if int(last_cum) + cum_regen_cooldown > int(time.time()):
+        send_message(f"АХАХХАХАХАХАХХА @{user_name} не зміг😖", chat_id)
+        return
 
     info['last_cum'] = int(time.time())
     update_penus_info(info)
@@ -196,14 +195,12 @@ def lambda_handler(event, context):
     print(body_str)
 
     body = json.loads(body_str)
-    command = body['message']['text']
+    if "message" not in body:
+        print("no message in body")
+        return
+
+    command = body.get("message")['text']
     print(f"Command {command}")
     handle_command(command, body)
 
     return json.dumps(event)
-
-input = open("input.json", "r+")
-text = input.read()
-print(f"File: {text}")
-lambda_handler(json.loads(text), {})
-input.close()
