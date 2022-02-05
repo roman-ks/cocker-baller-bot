@@ -26,8 +26,7 @@ def send_message(message, chat_id):
         'chat_id': chat_id,
         'text': message
     }
-    resp = requests.post(url=baseUrl + '/sendMessage', params=params)
-    print(resp.content)
+    requests.post(url=baseUrl + '/sendMessage', params=params)
 
 
 def set_commands():
@@ -38,8 +37,7 @@ def set_commands():
             {"command": "cum", "description": "Ух ох"}
             ]'''
     }
-    resp = requests.post(url=baseUrl + '/setMyCommands', data=data)
-    print(resp.content)
+    requests.post(url=baseUrl + '/setMyCommands', data=data)
 
 
 def get_penus_info(chat_id, user_id):
@@ -55,7 +53,6 @@ def get_penus_info(chat_id, user_id):
         }
     )
 
-    print(f"Dynamodb item: {resp}")
     item = {"chatId": chat_id, "userId": user_id}
     if "Item" in resp:
         if 'length' in resp['Item']:
@@ -68,9 +65,8 @@ def get_penus_info(chat_id, user_id):
 
 
 def update_penus_info(info):
-    print(f"new penus info: {info}")
 
-    resp = client.update_item(
+    client.update_item(
         TableName=dynamodb_table,
         Key={
             "chatId": {
@@ -98,8 +94,6 @@ def update_penus_info(info):
             }
         }
     )
-
-    print(f"dynamodb update response {resp}")
 
 
 def get_delta_phrase(d):
@@ -133,27 +127,21 @@ def check_penus(chat_id, user_id, user_name):
     item = get_penus_info(chat_id, user_id)
 
     if "length" in item:
-        print(f"found: {item}")
-
         length_old = int(item.get('length', min_length))
         circum_old = int(item.get('circum', min_circum))
 
-        print(f"Old vals, {length_old},{circum_old}")
         dlen = grow(10, min_length, length_old)
         dcir = grow(9, min_circum, circum_old)
-        print(f"D vals, {dlen},{dcir}")
 
         item['length'] = length_old + dlen
         item['circum'] = circum_old + dcir
         send_message(get_penus_status_message_with_delta(item['length'], item['circum'], dlen, dcir, user_name),
                      chat_id)
     else:
-        print("Not found in Dynamo")
         item['length'] = min_length
         item['circum'] = min_circum
         send_message(get_penus_status_message_new(user_name), chat_id)
 
-    print(f"New vals, {item['length']},{item['circum']}")
     update_penus_info(item)
 
 
@@ -161,7 +149,6 @@ def cum(chat_id, user_id, user_name):
     info = get_penus_info(chat_id, user_id)
 
     last_cum = info.get('last_cum', 0)
-    print(f'last cum {last_cum}')
     if int(last_cum) + cum_regen_cooldown > int(time.time()):
         send_message(f"АХАХХАХАХАХАХХА @{user_name} не зміг😖", chat_id)
         return
@@ -191,7 +178,7 @@ def handle_command(command, body):
 
 
 def lambda_handler(event, context):
-    print("Received event: " + json.dumps(event))
+
     body_str = event['body']
     print(body_str)
 
